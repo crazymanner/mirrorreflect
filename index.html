@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html >
+<head>
+  <meta charset="UTF-8">
+  <title>Rays reflection</title>
+  
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/5.0.0/normalize.min.css">
+
+  
+      <style>
+      /* NOTE: The styles were added inline because Prefixfree needs access to your styles and they must be inlined if they are on local disk! */
+      canvas {
+  width: 100%;
+  height: 100%;
+  position: fixed;
+}
+
+body {
+  background: black;
+}
+
+    </style>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prefixfree/1.0.7/prefixfree.min.js"></script>
+
+</head>
+
+<body>
+  <script type="text/paperscript" canvas="myCanvas">
+  var nOfRays = 4;
+  var sunPosition = new Point(100, 200);
+  var raysStyle = 1;
+
+  var updateOnMove = true;
+
+
+  var text = new PointText([sunPosition.x, sunPosition.y - 15]);
+  text.pivot = new Point(2, 15);
+  text.justification = 'center';
+  text.fillColor = 'yellow';
+  text.content = 'Sun';
+
+  var curve = new Path();
+  curve.strokeColor = 'white';
+  curve.strokeWidth = 4;
+  curve.segments = [];
+  curve.isSempliefed = true;
+  curve.moveTo([300, 100])
+  curve.arcTo([300, 300]);
+
+
+
+
+
+
+  var sun = new Path.Circle(sunPosition, 10)
+  sun.fillColor = "yellow";
+
+
+  var sunIsMoving = false;
+  sun.onMouseDown = function(event) {
+      sunIsMoving = true;
+      rayGroup.removeChildren();
+      fuoco.opacity=0;
+      reflesGroup.removeChildren();
+  }
+  sun.onMouseUp = function(event) {
+      sunIsMoving = false;
+  }
+
+  sun.onMouseDrag = function(event) {
+
+      if (sunIsMoving) {
+          sun.position = event.point;
+          if (updateOnMove) {
+              rays();
+              refles();
+              
+          }
+          text.position = sun.position
+      }
+  }
+
+  var fuoco = new Path.Circle([10,10],30);
+  fuoco.fillColor = {
+    gradient: {
+        stops: [['yellow', 0.05], ['red', 0.2], ['rgba(0,0,0,0)', 1]],
+        radial: true
+    },
+    origin: fuoco.position,
+    destination: fuoco.bounds.rightCenter
+};
+
+  var rayGroup = new Group();
+
+  function rays() {
+      var temp = new Path({
+          segments: [sun.position, curve.position]
+      })
+      var tangent = temp.getTangentAt(0);
+      temp.remove();
+
+      rayGroup.removeChildren();
+      for (var i = 1; i < nOfRays - 1; i++) {
+          var path = new Path({
+              strokeColor: "rgba(255,255,0,1)",
+              pivot: sunPosition
+          });
+
+          if (raysStyle == 0) {
+
+              path.segments = [sun.position, curve.getPointAt(curve.length / nOfRays * i) + tangent * 1];
+
+          } else {
+              //calculate parallel
+              path.segments = [curve.getPointAt(curve.length / nOfRays * i) - tangent * 1800, curve.getPointAt(curve.length / nOfRays * i) + tangent * 1];
+          }
+          rayGroup.addChild(path)
+      }
+      sun.bringToFront();
+  }
+
+
+
+  var reflesGroup = new Group();
+
+  function refles() {
+      reflesGroup.removeChildren();
+      for (var i = 0; i < rayGroup.children.length; i++) {
+          if (rayGroup.children[i].getIntersections(curve).length > 0) {
+
+
+              getReflected(rayGroup.children[i].getTangentAt(0), curve, rayGroup.children[i].getIntersections(curve)[0].point, 0)
+              rayGroup.children[i].segments = [rayGroup.children[i].firstSegment, rayGroup.children[i].getIntersections(curve)[0].point]
+          }
+      }
+  }
+
+  function getReflected(vec, curve, point, index) {
+      var reflected = new Path({
+          strokeColor: 'rgba(255,255,0,' + (1 - index / 4) + ')',
+          strokeWidth: 1
+      });
+      var offset = curve.getOffsetOf(point);
+      var normal = curve.getNormalAt(offset).normalize();
+
+      var part1 = normal * 2 * (vec.x * normal.x + vec.y * normal.y);
+      var r = (vec - part1) * 1300;
+      reflected.segments = [point - r / 1300, point + r];
+
+      if (reflected.getIntersections(curve).length > 1 && index < 4) {
+
+
+          getReflected(reflected.getTangentAt(0), curve, reflected.getIntersections(curve)[1].point, index + 1)
+          reflected.segments = [point, reflected.getIntersections(curve)[1].point]
+      }
+      reflesGroup.addChild(reflected);
+
+  }
+
+
+  function getFuoco() {
+      var nOfSiblings = 0;
+      var f = false;
+      var intersections = [];
+                                                                     
+
+      for (var i = 0; i < reflesGroup.children.length; i++) {
+          var refle = reflesGroup.children[i];
+          for (var n = 0; n < reflesGroup.children.length; n++) {
+              if (i != n) {
+                 var intersection = refle.getIntersections(reflesGroup.children[n]);
+                 if(intersection.length)intersections.push(intersection[0].point);
+              }
+          }
+      }
+      for (var i = 0; i < intersections.length; i++) {
+          var point = intersections[i];
+          point.nOfSiblings = 0;
+          
+          for (var n = 0; n < intersections.length; n++) {
+              if (i != n) {
+                  if (point.isClose(intersections[n], 5)) {
+                      point.nOfSiblings += 1;
+                  }
+              }
+          }
+          if (point.nOfSiblings > nOfSiblings) {
+              f = point;
+              nOfSiblings = point.nOfSiblings
+          }
+      }
+  if(f){
+    fuoco.position = f;
+  fuoco.opacity=1;
+  fuoco.bringToFront();
+  }    
+  
+      
+  }
+  
+
+  function onMouseDown(event) {
+      if (sunIsMoving) return false;
+      curve.removeSegments();
+      rayGroup.removeChildren();
+      fuoco.opacity = 0;
+      reflesGroup.removeChildren();
+      curve.add(event.point);
+      curve.isSempliefed = false
+
+
+
+  }
+
+
+  // While the user drags the mouse, points are added to the path
+  // at the position of the mouse:
+  function onMouseDrag(event) {
+      if (sunIsMoving) return false;
+
+      curve.add(event.point);
+
+  }
+
+  // When the mouse is released, we simplify the path:
+  function onMouseUp(event) {
+      var segmentCount = curve.segments.length;
+
+      // When the mouse is released, simplify it:
+      if (!curve.isSempliefed) {
+          curve.simplify(10);
+          curve.isSimpliefid = true;
+      }
+
+      // Select the path, so we can see its segments:
+
+      rays();
+      refles();
+      getFuoco();
+
+  }
+
+  rays();
+  refles();
+  getFuoco();
+</script>
+
+<canvas id="myCanvas" resize></canvas>
+  <script src='https://cdnjs.cloudflare.com/ajax/libs/paper.js/0.9.24/paper-full.min.js'></script>
+<script src='http://cdnjs.cloudflare.com/ajax/libs/jquery/2.1.3/jquery.min.js'></script>
+
+  
+</body>
+</html>
